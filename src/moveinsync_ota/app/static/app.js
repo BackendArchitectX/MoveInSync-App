@@ -273,11 +273,11 @@ function cardHTML(c) {
     fleetStr,
   ];
   if (c.top_non_nodelay_reason) {
-    tags.push('Recorded: ' + esc(c.top_non_nodelay_reason));
+    tags.push('Top non-NODELAY: ' + esc(c.top_non_nodelay_reason));
   }
 
   const nodDelayBadge = c.nodelay_dominates
-    ? '<span class="nodelay-badge">NODELAY-dominant data</span>'
+    ? '<span class="nodelay-badge">NODELAY most frequent label</span>'
     : '';
 
   return (
@@ -342,7 +342,7 @@ function detailHTML(d) {
   const fleetStr    = fleetArrow + Math.abs(d.fleet_ota_pp_change).toFixed(2) + ' pts';
 
   const nodDelayBadge = d.nodelay_dominates
-    ? '<span class="amber-badge">Data-quality signal: NODELAY dominates recorded reasons</span>'
+    ? '<span class="amber-badge">Recorded-label pattern: NODELAY is the most frequent recorded reason</span>'
     : '';
 
   const toleranceMins = Math.round(d.T_seconds / 60);
@@ -391,7 +391,7 @@ function detailHTML(d) {
               d.fleet_prior_ota_pct.toFixed(2) + '% → ' + d.fleet_current_ota_pct.toFixed(2) + '%') +
             tile('Fleet movement', fleetStr) +
             tile('Eligible vendors', String(d.eligible_vendor_count)) +
-            tile('Breaches',
+            tile('Threshold crossings',
               d.breach_count + ' of ' + d.eligible_vendor_count +
               ' (' + d.breach_pct.toFixed(1) + '%)') +
           '</div>' +
@@ -404,7 +404,7 @@ function detailHTML(d) {
             tile('Total late trips', d.total_late_count.toLocaleString()) +
             tile('NODELAY',
               d.nodelay_count.toLocaleString() + ' (' + (d.nodelay_share * 100).toFixed(1) + '%)') +
-            tile('NODELAY dominant', d.nodelay_dominates ? 'Yes' : 'No') +
+            tile('NODELAY most frequent', d.nodelay_dominates ? 'Yes' : 'No') +
             tile('Top non-NODELAY',  esc(d.top_non_nodelay_reason || '—')) +
           '</div>' +
           nodDelayBadge +

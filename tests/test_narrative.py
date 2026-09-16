@@ -200,3 +200,315 @@ class TestBedrockPromptConstraints:
     def test_prompt_forbids_root_cause_inference(self):
         prompt = self._get_prompt()
         assert "Do not infer root cause" in prompt
+
+    def test_prompt_declares_nodelay_opaque(self):
+        prompt = self._get_prompt()
+        assert "NODELAY is a literal source-data category" in prompt
+
+    def test_prompt_forbids_magnitude_comparison(self):
+        prompt = self._get_prompt()
+        assert "Never compare the magnitude" in prompt
+
+
+# ── D2. Deterministic semantic correctness ────────────────────────────────────
+
+class TestDeterministicSemantics:
+    def test_uses_labeled_nodelay_wording(self):
+        text = DeterministicNarrativeProvider().generate(_make_candidate())
+        assert "were labeled NODELAY" in text
+
+    def test_no_no_recorded_delay_reason(self):
+        text = DeterministicNarrativeProvider().generate(_make_candidate()).lower()
+        assert "no recorded delay reason" not in text
+
+    def test_no_unattributed(self):
+        text = DeterministicNarrativeProvider().generate(_make_candidate()).lower()
+        assert "unattributed" not in text
+
+    def test_no_compliance_wording(self):
+        text = DeterministicNarrativeProvider().generate(_make_candidate()).lower()
+        assert "compliance" not in text
+
+    def test_no_data_quality_wording(self):
+        text = DeterministicNarrativeProvider().generate(_make_candidate()).lower()
+        assert "data-quality" not in text
+        assert "data quality" not in text
+
+    def test_uses_percentage_points_not_pp(self):
+        import re as _re
+        text = DeterministicNarrativeProvider().generate(_make_candidate())
+        assert "percentage points" in text
+        assert not _re.search(r"\d\s+pp\b", text)
+
+    def test_no_breach_terminology(self):
+        text = DeterministicNarrativeProvider().generate(_make_candidate()).lower()
+        assert "breach" not in text
+
+
+# ── E. Fail-closed narrative validator ───────────────────────────────────────
+
+class TestNarrativeValidator:
+    def _provider_returning(self, text: str) -> BedrockNarrativeProvider:
+        provider = BedrockNarrativeProvider(
+            model_id="fake-model",
+            region="us-east-1",
+            fallback=DeterministicNarrativeProvider(),
+        )
+        mock_client = MagicMock()
+        mock_client.converse.return_value = {
+            "output": {"message": {"content": [{"text": text}]}}
+        }
+        provider._client = mock_client
+        return provider
+
+    def test_safe_output_returned_normally(self):
+        # Use only numbers present in the default _make_candidate() evidence set:
+        # abs(ota_pp_change)=10.0, fleet_prior=65.0, fleet_current=58.0,
+        # breach_count=8, eligible_vendor_count=10
+        safe_text = (
+            "Test Vendor OTA declined by 10.00 percentage points from May to June. "
+            "Fleet OTA moved from 65.00% to 58.00%. "
+            "8 of 10 eligible vendors crossed the configured deterioration threshold."
+        )
+        result = self._provider_returning(safe_text).generate(_make_candidate())
+        assert result == safe_text
+
+    def test_unsafe_causal_output_falls_back(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()
+        unsafe = "The OTA decline was caused by TRAFFIC congestion in the current period."
+        provider = self._provider_returning(unsafe)
+        provider._fallback = det
+        result = provider.generate(c)
+        assert result == det.generate(c)
+
+    def test_unsafe_nodelay_interpretation_falls_back(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()
+        unsafe = "91.1% had no recorded delay reason, suggesting data-quality issues."
+        provider = self._provider_returning(unsafe)
+        provider._fallback = det
+        result = provider.generate(c)
+        assert result == det.generate(c)
+
+    def test_unsafe_fleet_magnitude_comparison_falls_back(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()
+        unsafe = "The vendor's decline exceeds the fleet OTA change significantly."
+        provider = self._provider_returning(unsafe)
+        provider._fallback = det
+        result = provider.generate(c)
+        assert result == det.generate(c)
+
+    def test_unsafe_breach_terminology_falls_back(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()
+        unsafe = "18 vendors breached the threshold in this period."
+        provider = self._provider_returning(unsafe)
+        provider._fallback = det
+        result = provider.generate(c)
+        assert result == det.generate(c)
+
+    def test_numeric_pp_normalized_to_percentage_points(self):
+        # Use candidate whose numbers match the text exactly for provenance pass.
+        c = _make_candidate(ota_pp_change=-7.86, fleet_ota_pp_change=-5.84)
+        raw = (
+            "OTA declined by 7.86 pp from May to June. "
+            "Fleet moved 5.84 pp. "
+            "8 of 10 vendors crossed the configured threshold."
+        )
+        result = self._provider_returning(raw).generate(c)
+        assert "7.86 percentage points" in result
+        assert "5.84 percentage points" in result
+
+
+# ── F. Expanded validator coverage ───────────────────────────────────────────
+
+class TestValidatorExpansions:
+    """Regression tests for patterns added in the second hardening pass."""
+
+    def _provider_returning(self, text: str, candidate=None) -> BedrockNarrativeProvider:
+        c = candidate or _make_candidate()
+        provider = BedrockNarrativeProvider(
+            model_id="fake-model",
+            region="us-east-1",
+            fallback=DeterministicNarrativeProvider(),
+        )
+        mock_client = MagicMock()
+        mock_client.converse.return_value = {
+            "output": {"message": {"content": [{"text": text}]}}
+        }
+        provider._client = mock_client
+        return provider
+
+    # ── Qualitative severity ──────────────────────────────────────────────────
+
+    def test_widespread_exact_observed_form_falls_back(self):
+        # Exact form observed in a live Bedrock invocation.
+        c = _make_candidate(breach_count=18, eligible_vendor_count=21)
+        unsafe = (
+            "18 of 21 vendors crossed the threshold, "
+            "indicating deterioration is widespread across the fleet."
+        )
+        det = DeterministicNarrativeProvider()
+        p = self._provider_returning(unsafe, candidate=c)
+        p._fallback = det
+        assert p.generate(c) == det.generate(c)
+
+    def test_pervasive_falls_back(self):
+        c = _make_candidate(breach_count=8, eligible_vendor_count=10)
+        p = self._provider_returning(
+            "OTA deterioration is pervasive across vendors.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_severe_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning("The vendor experienced severe OTA decline.", candidate=c)
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_systemic_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "This represents a systemic deterioration pattern.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    # ── Ranking language ──────────────────────────────────────────────────────
+
+    def test_best_vendor_ranking_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning("Meera is one of the best vendors.", candidate=c)
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_worst_vendor_ranking_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "Meera is the worst-performing vendor.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    # ── Expanded causal forms ─────────────────────────────────────────────────
+
+    def test_driven_by_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "OTA deterioration was driven by TRAFFIC.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_because_of_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "OTA declined because of DRIVER issues.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_contributed_to_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "NODELAY contributed to the deterioration.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    # ── Residual pp ───────────────────────────────────────────────────────────
+
+    def test_residual_pp_without_number_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning("OTA experienced a pp decline.", candidate=c)
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    # ── NODELAY phrase coverage ───────────────────────────────────────────────
+
+    def test_nodelay_missing_reason_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "NODELAY indicates a missing reason.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_nodelay_reason_not_captured_falls_back(self):
+        c = _make_candidate()
+        p = self._provider_returning(
+            "NODELAY means the reason was not captured.", candidate=c
+        )
+        p._fallback = DeterministicNarrativeProvider()
+        assert p.generate(c) == DeterministicNarrativeProvider().generate(c)
+
+    def test_safe_nodelay_recorded_label_accepted(self):
+        c = _make_candidate()
+        safe = (
+            "NODELAY is a recorded source-data label "
+            "whose operational meaning is not established."
+        )
+        p = self._provider_returning(safe, candidate=c)
+        assert p.generate(c) == safe
+
+
+# ── G. Numeric provenance ─────────────────────────────────────────────────────
+
+class TestNumericProvenance:
+    """Verify that numeric values not supplied to the model cause fallback."""
+
+    def _provider_returning(self, text: str, candidate=None) -> BedrockNarrativeProvider:
+        c = candidate or _make_candidate()
+        provider = BedrockNarrativeProvider(
+            model_id="fake-model",
+            region="us-east-1",
+            fallback=DeterministicNarrativeProvider(),
+        )
+        mock_client = MagicMock()
+        mock_client.converse.return_value = {
+            "output": {"message": {"content": [{"text": text}]}}
+        }
+        provider._client = mock_client
+        return provider
+
+    def test_provenance_rejects_invented_trip_count(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()  # current_total_count=1000
+        p = self._provider_returning("Based on 3,000 trips.", candidate=c)
+        p._fallback = det
+        assert p.generate(c) == det.generate(c)
+
+    def test_provenance_rejects_invented_percentage(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()
+        p = self._provider_returning("90% of trips were affected.", candidate=c)
+        p._fallback = det
+        assert p.generate(c) == det.generate(c)
+
+    def test_provenance_rejects_invented_vendor_count(self):
+        det = DeterministicNarrativeProvider()
+        c = _make_candidate()  # eligible_vendor_count=10
+        p = self._provider_returning("12 vendors crossed the threshold.", candidate=c)
+        p._fallback = det
+        assert p.generate(c) == det.generate(c)
+
+    def test_provenance_accepts_formatted_supplied_count(self):
+        c = _make_candidate()  # current_total_count=1000
+        safe = "Based on 1,000 current-period trips."
+        p = self._provider_returning(safe, candidate=c)
+        assert p.generate(c) == safe
+
+    def test_provenance_accepts_safe_supplied_numbers(self):
+        # All numbers are from default _make_candidate() evidence.
+        c = _make_candidate()
+        safe = (
+            "Test Vendor OTA declined by 10.00 percentage points, "
+            "from 70.00% to 60.00%, based on 1,000 current-period trips. "
+            "Fleet OTA moved from 65.00% to 58.00%. "
+            "8 of 10 eligible vendors crossed the configured deterioration threshold."
+        )
+        p = self._provider_returning(safe, candidate=c)
+        assert p.generate(c) == safe

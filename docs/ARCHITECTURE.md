@@ -4,7 +4,7 @@
 
 OTA Watchdog is a single-process Python application. It loads three months of anonymised ride-log CSV data once at startup, runs a deterministic OTA pipeline, and serves a FastAPI web UI with optional Claude/Bedrock narrative generation.
 
-The core design principle: **every breach decision is made deterministically**. The LLM is restricted to converting pre-computed evidence into a human-readable operational brief.
+The core design principle: **every threshold-crossing decision is made deterministically**. The LLM is restricted to converting pre-computed evidence into a human-readable operational brief.
 
 ---
 
@@ -127,15 +127,15 @@ A mismatch in `t_seconds` between two periods raises `ValueError` in `compare_pe
 
 ---
 
-## Why no LLM is involved in breach calculation
+## Why no LLM is involved in threshold-crossing calculation
 
-The breach determination is a threshold comparison on deterministic numbers. Delegating it to an LLM would:
+The threshold-crossing determination is a threshold comparison on deterministic numbers. Delegating it to an LLM would:
 
-- make the breach non-reproducible (temperature > 0, prompt variation)
+- make the threshold crossing non-reproducible (temperature > 0, prompt variation)
 - make the evidence non-auditable
 - introduce hallucination risk on numerical data
 
-The LLM is introduced only after the breach decision is final, to convert a structured evidence block into a paragraph. The paragraph cannot retroactively alter the alert identity, the OTA values, or the breach status.
+The LLM is introduced only after the threshold-crossing decision is final, to convert a structured evidence block into a paragraph. The paragraph cannot retroactively alter the alert identity, the OTA values, or the threshold-crossing status.
 
 ---
 
