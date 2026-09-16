@@ -162,3 +162,41 @@ class TestBedrockFallback:
             assert isinstance(result, str) and len(result) > 0
         except Exception:
             pytest.fail("generate() must not raise when Bedrock fails")
+
+
+# ── D. Bedrock prompt constraints ─────────────────────────────────────────
+
+class TestBedrockPromptConstraints:
+    def _get_prompt(self) -> str:
+        provider = BedrockNarrativeProvider(model_id="fake-model")
+        return provider._build_prompt(_make_candidate())
+
+    def test_prompt_forbids_causality(self):
+        prompt = self._get_prompt()
+        assert "Do not claim causality" in prompt
+
+    def test_prompt_labels_delay_context_as_non_causal(self):
+        prompt = self._get_prompt()
+        assert "delay reasons are context only" in prompt
+
+    def test_prompt_forbids_recalculation(self):
+        prompt = self._get_prompt()
+        assert "Do not calculate or re-derive" in prompt
+
+    def test_prompt_forbids_new_numbers(self):
+        prompt = self._get_prompt()
+        assert "Do not introduce new calculations or numbers" in prompt
+
+    def test_prompt_restricts_fleet_comparison_wording(self):
+        prompt = self._get_prompt()
+        assert "above/below the fleet-level OTA" in prompt
+
+    def test_prompt_forbids_ranking_language(self):
+        prompt = self._get_prompt()
+        assert "outperform" in prompt
+        assert "underperform" in prompt
+        assert "benchmark" in prompt
+
+    def test_prompt_forbids_root_cause_inference(self):
+        prompt = self._get_prompt()
+        assert "Do not infer root cause" in prompt

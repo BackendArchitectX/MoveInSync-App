@@ -8,12 +8,18 @@
 </head>
 <body>
   <header>
-    <div class="header-left">
+    <div class="header-brand">
       <h1>OTA Watchdog</h1>
       <p class="tagline">Transport Operations Intelligence</p>
     </div>
-    <div class="policy-badge">
-      Demo policy: 5-min OTA tolerance &nbsp;&#183;&nbsp; 500-trip min volume &nbsp;&#183;&nbsp; &gt;5 pp deterioration threshold
+    <div class="policy-chip">
+      <div class="policy-items">
+        5-min OTA tolerance
+        <span class="policy-sep">&middot;</span>
+        500-trip min volume
+        <span class="policy-sep">&middot;</span>
+        &gt;5 pp threshold
+      </div>
       <div class="policy-note">Product/demo defaults &mdash; not contractual SLA values.</div>
     </div>
   </header>
@@ -42,7 +48,12 @@
       </div>
     </div>
 
-    <div id="alert-feed" class="alert-feed" role="list" aria-label="Alert feed">
+    <div class="feed-header">
+      <h2 class="feed-title">Detected Deteriorations</h2>
+      <span class="feed-count-badge" id="feed-count" style="display:none"></span>
+    </div>
+
+    <div id="alert-feed" class="alert-feed" role="list" aria-label="Detected deteriorations feed">
       <div class="feed-loading">
         <span class="spinner"></span>
         <span>Loading alerts&hellip;</span>
