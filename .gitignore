@@ -1,0 +1,29 @@
+# Raw source dataset - keep local
+input/dataset/raw/**
+
+# Derived/generated data
+data/processed/**
+data/generated/**
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDE / OS
+.idea/
+*.iml
+Thumbs.db
+.DS_Store
