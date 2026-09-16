@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTA Watchdog — Transport Operations Intelligence</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>OTA Watchdog</h1>
+      <p class="tagline">Transport Operations Intelligence</p>
+    </div>
+    <div class="policy-badge">
+      Demo policy: 5-min OTA tolerance &nbsp;&#183;&nbsp; 500-trip min volume &nbsp;&#183;&nbsp; &gt;5 pp deterioration threshold
+      <div class="policy-note">Product/demo defaults &mdash; not contractual SLA values.</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="controls">
+      <div class="comparison-tabs" role="tablist">
+        <button class="tab active" data-key="may-june" role="tab" aria-selected="true">May &rarr; June</button>
+        <button class="tab" data-key="june-july" role="tab" aria-selected="false">June &rarr; July</button>
+      </div>
+      <button id="run-replay" class="replay-btn" aria-label="Run Agent Cycle">
+        &#9654; Run Agent Cycle
+      </button>
+    </div>
+
+    <div id="run-summary" class="run-summary" aria-live="polite">
+      <div class="phases">
+        <span class="phase pending" id="phase-sense">SENSE</span>
+        <span class="phase-arrow">&rarr;</span>
+        <span class="phase pending" id="phase-reason">REASON</span>
+        <span class="phase-arrow">&rarr;</span>
+        <span class="phase pending" id="phase-act">ACT</span>
+      </div>
+      <div class="run-metrics" id="run-metrics">
+        <span class="metric-loading">Loading&hellip;</span>
+      </div>
+    </div>
+
+    <div id="alert-feed" class="alert-feed" role="list" aria-label="Alert feed">
+      <div class="feed-loading">
+        <span class="spinner"></span>
+        <span>Loading alerts&hellip;</span>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Alert detail">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <button class="modal-close" aria-label="Close">&times;</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
