@@ -61,7 +61,7 @@ function setupReplayButton() {
     const replayKey = _activeKey;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Running&hellip;';
-    renderPhases(false);
+    renderPhases(false, 0);
 
     try {
       const result = await API.replay(replayKey);
@@ -87,23 +87,88 @@ function setupReplayButton() {
 function renderView(key) {
   if (!_state || !_state[key]) return;
   const data = _state[key];
-  renderPhases(!!data.run);
+  const run  = data.run;
+  renderPhases(!!run, run ? run.breach_count : 0);
+  renderDecisionHeadline(data);
+  renderTimestamp(run);
   renderMetrics(data);
-  renderFeed(data.candidates || [], data.run, data.comparison);
+  renderFeed(data.candidates || [], run, data.comparison);
 }
 
-function renderPhases(complete) {
+function renderPhases(complete, breachCount) {
+  const desc = {
+    sense:  'Monthly ride evidence',
+    reason: 'OTA + volume + fleet context',
+    act:    complete
+      ? (breachCount > 0
+          ? breachCount + ' evidence-backed alert' + (breachCount === 1 ? '' : 's')
+          : 'No material deterioration detected')
+      : '',
+  };
   ['sense', 'reason', 'act'].forEach(p => {
     const el = document.getElementById('phase-' + p);
     if (!el) return;
     if (complete) {
       el.className = 'phase done';
-      el.textContent = p.toUpperCase() + ' ✓';
+      el.innerHTML =
+        '<span class="phase-check">&#10003;</span>' +
+        '<span class="phase-name">' + p.toUpperCase() + '</span>' +
+        (desc[p] ? '<span class="phase-desc">' + desc[p] + '</span>' : '');
     } else {
       el.className = 'phase pending';
-      el.textContent = p.toUpperCase();
+      el.innerHTML =
+        '<span class="phase-name">' + p.toUpperCase() + '</span>' +
+        (desc[p] ? '<span class="phase-desc">' + desc[p] + '</span>' : '');
     }
   });
+}
+
+function renderDecisionHeadline(data) {
+  const el   = document.getElementById('decision-headline');
+  if (!el) return;
+  const run  = data.run;
+  const comp = data.comparison;
+  if (!run) {
+    el.className = 'decision-headline neutral';
+    el.innerHTML = '<span class="decision-text">Run the agent cycle to evaluate this analysis window.</span>';
+    return;
+  }
+  const threshold    = comp ? comp.deterioration_threshold_pp : null;
+  const thresholdStr = threshold !== null
+    ? '&gt;' + threshold + ' percentage-point'
+    : 'the configured';
+  if (run.breach_count > 0) {
+    el.className = 'decision-headline breach';
+    el.innerHTML =
+      '<span class="decision-flag">ATTENTION REQUIRED</span>' +
+      '<span class="decision-text">' +
+        run.breach_count + ' of ' + run.eligible_vendor_count +
+        ' eligible vendors crossed the configured ' + thresholdStr +
+        ' deterioration threshold.' +
+      '</span>';
+  } else {
+    el.className = 'decision-headline clear';
+    el.innerHTML =
+      '<span class="decision-flag">NO MATERIAL DETERIORATION DETECTED</span>' +
+      '<span class="decision-text">' +
+        'No eligible vendor crossed the configured ' + thresholdStr +
+        ' deterioration threshold.' +
+      '</span>';
+  }
+}
+
+function renderTimestamp(run) {
+  const el = document.getElementById('run-timestamp');
+  if (!el) return;
+  if (!run || !run.completed_at) { el.textContent = ''; return; }
+  try {
+    const dt      = new Date(run.completed_at);
+    const fmtDate = dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const fmtTime = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    el.textContent = 'Last agent run · ' + fmtDate + ', ' + fmtTime + ' UTC';
+  } catch (_e) {
+    el.textContent = '';
+  }
 }
 
 function renderMetrics(data) {
@@ -117,11 +182,12 @@ function renderMetrics(data) {
   const priorStr   = comp ? comp.fleet_prior_ota_pct.toFixed(2) + '%' : '—';
   const currentStr = comp ? comp.fleet_current_ota_pct.toFixed(2) + '%' : '—';
   const deltaVal   = comp ? comp.fleet_ota_pp_change : null;
+  const arrowChar  = deltaVal === null ? '' : deltaVal < 0 ? '↓ ' : deltaVal > 0 ? '↑ ' : '';
   const deltaStr   = deltaVal !== null
-    ? (deltaVal >= 0 ? '+' : '') + deltaVal.toFixed(2) + ' pp'
+    ? arrowChar + Math.abs(deltaVal).toFixed(2) + ' pts'
     : '—';
-  const deltaCls = deltaVal === null ? '' : deltaVal < 0 ? ' neg' : deltaVal > 0 ? ' pos' : '';
-  const alertCls = run.breach_count > 0 ? ' alert' : ' ok';
+  const deltaCls   = deltaVal === null ? '' : deltaVal < 0 ? ' neg' : deltaVal > 0 ? ' pos' : '';
+  const alertCls   = run.breach_count > 0 ? ' alert' : ' ok';
 
   document.getElementById('run-metrics').innerHTML =
     '<div class="kpi-block">' +
@@ -136,20 +202,34 @@ function renderMetrics(data) {
       '<div class="kpi-value">' + priorStr + ' → ' + currentStr + '</div>' +
       '<div class="kpi-label">Fleet OTA</div>' +
       '<div class="kpi-sub' + deltaCls + '">' + deltaStr + '</div>' +
-    '</div>';
+    '</div>' +
+    '<div class="kpi-hint">pts = percentage-point change</div>';
 }
 
 function renderFeed(candidates, run, comparison) {
-  const feed    = document.getElementById('alert-feed');
-  const countEl = document.getElementById('feed-count');
+  const feed       = document.getElementById('alert-feed');
+  const countEl    = document.getElementById('feed-count');
+  const titleEl    = document.getElementById('feed-title');
+  const subtitleEl = document.getElementById('feed-subtitle');
 
+  // Update heading to reflect current run state
   if (!run) {
-    if (countEl) countEl.style.display = 'none';
+    if (titleEl)    titleEl.textContent    = 'Vendor Alert Feed';
+    if (subtitleEl) subtitleEl.textContent = 'Run the agent cycle to evaluate this analysis window.';
+    if (countEl)    countEl.style.display  = 'none';
     feed.innerHTML =
       '<div class="feed-loading">' +
         'Run the agent cycle to evaluate OTA deterioration.' +
       '</div>';
     return;
+  }
+
+  if (run.breach_count > 0) {
+    if (titleEl)    titleEl.textContent    = 'Vendors Requiring Attention';
+    if (subtitleEl) subtitleEl.textContent = 'Evidence-backed alerts that crossed the configured deterioration threshold.';
+  } else {
+    if (titleEl)    titleEl.textContent    = 'No Vendors Requiring Attention';
+    if (subtitleEl) subtitleEl.textContent = 'No evidence-backed alerts were generated for this analysis window.';
   }
 
   if (countEl) {
@@ -160,20 +240,16 @@ function renderFeed(candidates, run, comparison) {
       countEl.style.display = 'none';
     }
   }
+
   if (!candidates.length) {
-    const threshold    = comparison ? comparison.deterioration_threshold_pp : null;
-    const thresholdStr = threshold !== null
-      ? '&gt;' + threshold + '&nbsp;pp'
-      : 'the configured';
     feed.innerHTML =
-      '<div class="empty-state">' +
-        '<div class="empty-icon" aria-hidden="true">✓</div>' +
-        '<h3>No material OTA deterioration detected</h3>' +
-        '<p>' + run.eligible_vendor_count + ' vendors met the volume threshold.</p>' +
-        '<p>No vendor exceeded ' + thresholdStr + ' deterioration trigger.</p>' +
+      '<div class="zero-alert-note">' +
+        '<span class="zero-check" aria-hidden="true">&#10003;</span>' +
+        '<span>No vendor alerts generated for this analysis window.</span>' +
       '</div>';
     return;
   }
+
   feed.innerHTML = candidates.map(cardHTML).join('');
   feed.querySelectorAll('.alert-card').forEach(card => {
     card.addEventListener('click', () => openDetail(card.dataset.alertId));
@@ -187,17 +263,23 @@ function renderFeed(candidates, run, comparison) {
 }
 
 function cardHTML(c) {
-  const deltaStr = c.ota_pp_change.toFixed(2) + ' pp';
+  const ota_arrow  = c.ota_pp_change < 0 ? '↓ ' : c.ota_pp_change > 0 ? '↑ ' : '';
+  const deltaStr   = ota_arrow + Math.abs(c.ota_pp_change).toFixed(2) + ' pts';
+  const fleetArrow = c.fleet_ota_pp_change < 0 ? '↓ ' : c.fleet_ota_pp_change > 0 ? '↑ ' : '';
+  const fleetStr   = 'Fleet ' + fleetArrow + Math.abs(c.fleet_ota_pp_change).toFixed(2) + ' pts';
+
   const tags = [
     c.current_total_count.toLocaleString() + ' trips',
-    'Fleet ' + (c.fleet_ota_pp_change >= 0 ? '+' : '') + c.fleet_ota_pp_change.toFixed(2) + ' pp',
+    fleetStr,
   ];
   if (c.top_non_nodelay_reason) {
     tags.push('Recorded: ' + esc(c.top_non_nodelay_reason));
   }
+
   const nodDelayBadge = c.nodelay_dominates
     ? '<span class="nodelay-badge">NODELAY-dominant data</span>'
     : '';
+
   return (
     '<div class="alert-card" role="listitem" tabindex="0" data-alert-id="' + c.alert_id + '">' +
       '<div class="card-vendor">' + esc(c.vendor_id) + '</div>' +
@@ -210,6 +292,9 @@ function cardHTML(c) {
       '<div class="card-meta">' +
         tags.map(t => '<span class="card-tag">' + t + '</span>').join('') +
         nodDelayBadge +
+      '</div>' +
+      '<div class="card-cta-row">' +
+        '<span class="card-cta">View evidence →</span>' +
       '</div>' +
     '</div>'
   );
@@ -251,21 +336,30 @@ function detailHTML(d) {
     .map(e => '<tr><td>' + esc(e[0]) + '</td><td>' + e[1].toLocaleString() + '</td></tr>')
     .join('');
 
+  const changeArrow = d.ota_pp_change < 0 ? '↓ ' : d.ota_pp_change > 0 ? '↑ ' : '';
+  const changeStr   = changeArrow + Math.abs(d.ota_pp_change).toFixed(2) + ' pts';
+  const fleetArrow  = d.fleet_ota_pp_change < 0 ? '↓ ' : d.fleet_ota_pp_change > 0 ? '↑ ' : '';
+  const fleetStr    = fleetArrow + Math.abs(d.fleet_ota_pp_change).toFixed(2) + ' pts';
+
   const nodDelayBadge = d.nodelay_dominates
     ? '<span class="amber-badge">Data-quality signal: NODELAY dominates recorded reasons</span>'
     : '';
 
-  const narrative = d.narrative
+  const toleranceMins = Math.round(d.T_seconds / 60);
+
+  const briefCard = d.narrative
     ? '<div class="brief-card">' +
         '<div class="brief-header">' +
           '<h3>Claude Operational Brief</h3>' +
-          '<span class="brief-label">Generated from deterministic alert evidence</span>' +
+          '<span class="brief-label">AI-generated operational summary</span>' +
         '</div>' +
+        '<p class="brief-provenance">Generated only from deterministic alert evidence</p>' +
         '<div class="brief-text">' + renderNarrative(d.narrative) + '</div>' +
-        '<div class="brief-caution">Recorded delay context shows operational data only. ' +
-          'Causality cannot be inferred from delay reason codes alone.</div>' +
+        '<div class="brief-caution">Recorded delay context is observational and does not establish causality.</div>' +
       '</div>'
     : '';
+
+  const rightCol = briefCard ? '<div class="modal-right">' + briefCard + '</div>' : '';
 
   return (
     '<div class="modal-head">' +
@@ -275,58 +369,81 @@ function detailHTML(d) {
       '</div>' +
     '</div>' +
 
-    '<div class="evidence-section">' +
-      '<h3 class="section-label">Vendor Evidence</h3>' +
-      '<div class="tile-grid">' +
-        tile('Prior OTA',     d.prior_ota_pct.toFixed(2) + '%') +
-        tile('Current OTA',   d.current_ota_pct.toFixed(2) + '%') +
-        tileNeg('OTA Change', d.ota_pp_change.toFixed(2) + ' pp') +
-        tile('Current trips', d.current_total_count.toLocaleString()) +
+    '<div class="modal-columns">' +
+
+      '<div class="modal-left">' +
+        '<div class="det-label">DETERMINISTIC EVIDENCE</div>' +
+
+        '<div class="evidence-section">' +
+          '<h3 class="section-label">Vendor Evidence</h3>' +
+          '<div class="tile-grid">' +
+            tile('Prior OTA',     d.prior_ota_pct.toFixed(2) + '%') +
+            tile('Current OTA',   d.current_ota_pct.toFixed(2) + '%') +
+            tileNeg('OTA Change', changeStr) +
+            tile('Current trips', d.current_total_count.toLocaleString()) +
+          '</div>' +
+        '</div>' +
+
+        '<div class="evidence-section">' +
+          '<h3 class="section-label">Fleet Context</h3>' +
+          '<div class="tile-grid">' +
+            tile('Fleet OTA',
+              d.fleet_prior_ota_pct.toFixed(2) + '% → ' + d.fleet_current_ota_pct.toFixed(2) + '%') +
+            tile('Fleet movement', fleetStr) +
+            tile('Eligible vendors', String(d.eligible_vendor_count)) +
+            tile('Breaches',
+              d.breach_count + ' of ' + d.eligible_vendor_count +
+              ' (' + d.breach_pct.toFixed(1) + '%)') +
+          '</div>' +
+        '</div>' +
+
+        '<div class="evidence-section">' +
+          '<h3 class="section-label">Recorded Delay Context</h3>' +
+          '<p class="section-note">Contextual evidence only — not a causal determination.</p>' +
+          '<div class="tile-grid">' +
+            tile('Total late trips', d.total_late_count.toLocaleString()) +
+            tile('NODELAY',
+              d.nodelay_count.toLocaleString() + ' (' + (d.nodelay_share * 100).toFixed(1) + '%)') +
+            tile('NODELAY dominant', d.nodelay_dominates ? 'Yes' : 'No') +
+            tile('Top non-NODELAY',  esc(d.top_non_nodelay_reason || '—')) +
+          '</div>' +
+          nodDelayBadge +
+          '<table class="dist-table">' +
+            '<thead><tr>' +
+              '<th>Reason</th>' +
+              '<th style="text-align:right">Trips</th>' +
+            '</tr></thead>' +
+            '<tbody>' + distRows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+
       '</div>' +
+
+      rightCol +
+
     '</div>' +
 
-    '<div class="evidence-section">' +
-      '<h3 class="section-label">Fleet Context</h3>' +
-      '<div class="tile-grid">' +
-        tile('Fleet OTA',
-          d.fleet_prior_ota_pct.toFixed(2) + '% → ' + d.fleet_current_ota_pct.toFixed(2) + '%') +
-        tile('Fleet change',     d.fleet_ota_pp_change.toFixed(2) + ' pp') +
-        tile('Eligible vendors', String(d.eligible_vendor_count)) +
-        tile('Breaches',
-          d.breach_count + ' of ' + d.eligible_vendor_count +
-          ' (' + d.breach_pct.toFixed(1) + '%)') +
-      '</div>' +
-    '</div>' +
-
-    '<div class="evidence-section">' +
-      '<h3 class="section-label">Recorded Delay Context</h3>' +
-      '<p class="section-note">Contextual evidence only — not a causal determination.</p>' +
-      '<div class="tile-grid">' +
-        tile('Total late trips', d.total_late_count.toLocaleString()) +
-        tile('NODELAY',
-          d.nodelay_count.toLocaleString() + ' (' + (d.nodelay_share * 100).toFixed(1) + '%)') +
-        tile('NODELAY dominates', d.nodelay_dominates ? 'Yes' : 'No') +
-        tile('Top non-NODELAY',   esc(d.top_non_nodelay_reason || '—')) +
-      '</div>' +
-      nodDelayBadge +
-      '<table class="dist-table">' +
-        '<thead><tr>' +
-          '<th>Reason</th>' +
-          '<th style="text-align:right">Trips</th>' +
-        '</tr></thead>' +
-        '<tbody>' + distRows + '</tbody>' +
-      '</table>' +
-    '</div>' +
-
-    narrative +
-
-    '<div class="evidence-section policy-section">' +
-      '<h3 class="section-label">Demo Policy</h3>' +
-      '<div class="tile-grid">' +
-        tile('T_SECONDS',      d.T_seconds + 's (5 min)') +
-        tile('Vol min',        d.vol_min.toLocaleString()) +
-        tile('Threshold',      '>' + d.deterioration_threshold_pp + ' pp') +
-        tile('Policy version', esc(d.policy_version)) +
+    '<div class="policy-strip">' +
+      '<div class="ps-row">' +
+        '<span class="ps-item">' +
+          '<span class="ps-label">OTA tolerance</span>' +
+          '<span class="ps-val">' + toleranceMins + ' min</span>' +
+        '</span>' +
+        '<span class="ps-sep">&middot;</span>' +
+        '<span class="ps-item">' +
+          '<span class="ps-label">Minimum volume</span>' +
+          '<span class="ps-val">' + d.vol_min.toLocaleString() + ' trips</span>' +
+        '</span>' +
+        '<span class="ps-sep">&middot;</span>' +
+        '<span class="ps-item">' +
+          '<span class="ps-label">Trigger</span>' +
+          '<span class="ps-val">&gt;' + d.deterioration_threshold_pp + ' percentage points</span>' +
+        '</span>' +
+        '<span class="ps-sep">&middot;</span>' +
+        '<span class="ps-item">' +
+          '<span class="ps-label">Policy</span>' +
+          '<span class="ps-val">' + esc(d.policy_version) + '</span>' +
+        '</span>' +
       '</div>' +
       '<div class="alert-id-row">Alert ID: <span class="alert-id">' + d.alert_id + '</span></div>' +
     '</div>'

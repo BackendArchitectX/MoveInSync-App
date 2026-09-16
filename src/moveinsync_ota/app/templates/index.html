@@ -3,22 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OTA Watchdog — Transport Operations Intelligence</title>
+  <title>OTA Watchdog — Transport Operations Command Center</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   <header>
     <div class="header-brand">
       <h1>OTA Watchdog</h1>
-      <p class="tagline">Transport Operations Intelligence</p>
+      <p class="tagline">Transport Operations Command Center</p>
+      <p class="header-sub">Evidence-led monitoring for vendor on-time arrival</p>
     </div>
-    <div class="policy-chip">
+    <div class="policy-context">
       <div class="policy-items">
         5-min OTA tolerance
         <span class="policy-sep">&middot;</span>
-        500-trip min volume
+        500-trip minimum
         <span class="policy-sep">&middot;</span>
-        &gt;5 pp threshold
+        &gt;5 percentage-point trigger
       </div>
       <div class="policy-note">Product/demo defaults &mdash; not contractual SLA values.</div>
     </div>
@@ -26,22 +27,31 @@
 
   <main>
     <div class="controls">
-      <div class="comparison-tabs" role="tablist">
-        <button class="tab active" data-key="may-june" role="tab" aria-selected="true">May &rarr; June</button>
-        <button class="tab" data-key="june-july" role="tab" aria-selected="false">June &rarr; July</button>
+      <div class="analysis-window">
+        <span class="control-label">Analysis Window</span>
+        <div class="comparison-tabs" role="tablist">
+          <button class="tab active" data-key="may-june" role="tab" aria-selected="true">May &rarr; June</button>
+          <button class="tab" data-key="june-july" role="tab" aria-selected="false">June &rarr; July</button>
+        </div>
       </div>
-      <button id="run-replay" class="replay-btn" aria-label="Run Agent Cycle">
-        &#9654; Run Agent Cycle
-      </button>
+      <div class="run-control">
+        <button id="run-replay" class="replay-btn" aria-label="Run Agent Cycle">
+          &#9654; Run Agent Cycle
+        </button>
+        <span class="run-timestamp" id="run-timestamp"></span>
+      </div>
     </div>
 
-    <div id="run-summary" class="run-summary" aria-live="polite">
-      <div class="phases">
+    <div class="decision-panel" aria-live="polite">
+      <div class="workflow">
         <span class="phase pending" id="phase-sense">SENSE</span>
-        <span class="phase-arrow">&rarr;</span>
+        <span class="workflow-arrow">&rarr;</span>
         <span class="phase pending" id="phase-reason">REASON</span>
-        <span class="phase-arrow">&rarr;</span>
+        <span class="workflow-arrow">&rarr;</span>
         <span class="phase pending" id="phase-act">ACT</span>
+      </div>
+      <div class="decision-headline neutral" id="decision-headline">
+        <span class="decision-text">Run the agent cycle to evaluate this analysis window.</span>
       </div>
       <div class="run-metrics" id="run-metrics">
         <span class="metric-loading">Loading&hellip;</span>
@@ -49,11 +59,14 @@
     </div>
 
     <div class="feed-header">
-      <h2 class="feed-title">Detected Deteriorations</h2>
+      <div class="feed-header-text">
+        <h2 class="feed-title" id="feed-title">Vendors Requiring Attention</h2>
+        <p class="feed-subtitle" id="feed-subtitle">Evidence-backed alerts that crossed the configured deterioration threshold.</p>
+      </div>
       <span class="feed-count-badge" id="feed-count" style="display:none"></span>
     </div>
 
-    <div id="alert-feed" class="alert-feed" role="list" aria-label="Detected deteriorations feed">
+    <div id="alert-feed" class="alert-feed" role="list" aria-label="Vendor alerts feed">
       <div class="feed-loading">
         <span class="spinner"></span>
         <span>Loading alerts&hellip;</span>
