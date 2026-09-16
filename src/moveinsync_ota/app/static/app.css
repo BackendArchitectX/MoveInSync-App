@@ -210,9 +210,11 @@ main { max-width: 1320px; margin: 0 auto; padding: 1.5rem 2rem; }
 .kpi-sub {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--red);
+  color: var(--text-muted);
   margin-top: 0.15rem;
 }
+.kpi-sub.neg { color: var(--red); }
+.kpi-sub.pos { color: var(--green); }
 
 .kpi-block.alert .kpi-value { color: var(--red); }
 .kpi-block.ok    .kpi-value { color: var(--green); }
@@ -582,9 +584,10 @@ main { max-width: 1320px; margin: 0 auto; padding: 1.5rem 2rem; }
 .brief-text {
   font-size: 0.875rem;
   line-height: 1.7;
-  white-space: pre-wrap;
   color: var(--text);
 }
+.brief-text p            { margin-bottom: 0.75em; }
+.brief-text p:last-child { margin-bottom: 0; }
 
 .brief-caution {
   font-size: 0.7rem;

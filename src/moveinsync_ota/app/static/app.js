@@ -58,13 +58,14 @@ function setupTabs() {
 function setupReplayButton() {
   document.getElementById('run-replay').addEventListener('click', async () => {
     const btn = document.getElementById('run-replay');
+    const replayKey = _activeKey;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Running&hellip;';
     renderPhases(false);
 
     try {
-      const result = await API.replay(_activeKey);
-      _state[_activeKey] = {
+      const result = await API.replay(replayKey);
+      _state[replayKey] = {
         run:        result.run,
         comparison: result.comparison,
         candidates: result.candidates,
@@ -88,7 +89,7 @@ function renderView(key) {
   const data = _state[key];
   renderPhases(!!data.run);
   renderMetrics(data);
-  renderFeed(data.candidates || [], data.run);
+  renderFeed(data.candidates || [], data.run, data.comparison);
 }
 
 function renderPhases(complete) {
@@ -110,7 +111,7 @@ function renderMetrics(data) {
   const comp = data.comparison;
   if (!run) {
     document.getElementById('run-metrics').innerHTML =
-      '<span class="metric-loading">No cycle run yet for this period.</span>';
+      '<span class="metric-loading">Run the agent cycle to evaluate OTA deterioration.</span>';
     return;
   }
   const priorStr   = comp ? comp.fleet_prior_ota_pct.toFixed(2) + '%' : '—';
@@ -119,6 +120,7 @@ function renderMetrics(data) {
   const deltaStr   = deltaVal !== null
     ? (deltaVal >= 0 ? '+' : '') + deltaVal.toFixed(2) + ' pp'
     : '—';
+  const deltaCls = deltaVal === null ? '' : deltaVal < 0 ? ' neg' : deltaVal > 0 ? ' pos' : '';
   const alertCls = run.breach_count > 0 ? ' alert' : ' ok';
 
   document.getElementById('run-metrics').innerHTML =
@@ -133,13 +135,23 @@ function renderMetrics(data) {
     '<div class="kpi-block">' +
       '<div class="kpi-value">' + priorStr + ' → ' + currentStr + '</div>' +
       '<div class="kpi-label">Fleet OTA</div>' +
-      '<div class="kpi-sub">' + deltaStr + '</div>' +
+      '<div class="kpi-sub' + deltaCls + '">' + deltaStr + '</div>' +
     '</div>';
 }
 
-function renderFeed(candidates, run) {
+function renderFeed(candidates, run, comparison) {
   const feed    = document.getElementById('alert-feed');
   const countEl = document.getElementById('feed-count');
+
+  if (!run) {
+    if (countEl) countEl.style.display = 'none';
+    feed.innerHTML =
+      '<div class="feed-loading">' +
+        'Run the agent cycle to evaluate OTA deterioration.' +
+      '</div>';
+    return;
+  }
+
   if (countEl) {
     if (candidates.length > 0) {
       countEl.textContent = candidates.length + (candidates.length === 1 ? ' alert' : ' alerts');
@@ -149,14 +161,16 @@ function renderFeed(candidates, run) {
     }
   }
   if (!candidates.length) {
-    const eligibleText = run ? run.eligible_vendor_count + ' vendors' : 'All vendors';
+    const threshold    = comparison ? comparison.deterioration_threshold_pp : null;
+    const thresholdStr = threshold !== null
+      ? '&gt;' + threshold + '&nbsp;pp'
+      : 'the configured';
     feed.innerHTML =
       '<div class="empty-state">' +
         '<div class="empty-icon" aria-hidden="true">✓</div>' +
         '<h3>No material OTA deterioration detected</h3>' +
-        '<p>' + esc(eligibleText) + ' met the volume threshold.</p>' +
-        '<p>No vendor exceeded the configured &gt;5&nbsp;pp deterioration trigger.</p>' +
-        '<p>Demo policy defaults applied.</p>' +
+        '<p>' + run.eligible_vendor_count + ' vendors met the volume threshold.</p>' +
+        '<p>No vendor exceeded ' + thresholdStr + ' deterioration trigger.</p>' +
       '</div>';
     return;
   }
@@ -247,7 +261,7 @@ function detailHTML(d) {
           '<h3>Claude Operational Brief</h3>' +
           '<span class="brief-label">Generated from deterministic alert evidence</span>' +
         '</div>' +
-        '<div class="brief-text">' + esc(d.narrative) + '</div>' +
+        '<div class="brief-text">' + renderNarrative(d.narrative) + '</div>' +
         '<div class="brief-caution">Recorded delay context shows operational data only. ' +
           'Causality cannot be inferred from delay reason codes alone.</div>' +
       '</div>'
@@ -337,6 +351,27 @@ function tileNeg(key, val) {
       '<div class="tile-val neg">' + val + '</div>' +
     '</div>'
   );
+}
+
+function renderNarrative(text) {
+  if (!text) return '';
+  return text
+    .split(/\n\n+/)
+    .filter(p => p.trim())
+    .map(para => {
+      const lines = para.split('\n').map(line => {
+        let s = line
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+        s = s.replace(/^#{1,6} (.+)$/, '<strong>$1</strong>');
+        s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+        return s;
+      });
+      return '<p>' + lines.join('<br>') + '</p>';
+    })
+    .join('');
 }
 
 function esc(str) {
