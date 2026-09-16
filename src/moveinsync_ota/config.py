@@ -16,3 +16,6 @@ MONTH_FILES: dict[str, str] = {
     "June": "Ride_data _trip-June_2026.csv",
     "July": "Ride_data _trip-July_2026.csv",
 }
+
+VOL_MIN: int = 500
+DETERIORATION_THRESHOLD_PP: float = 5.0

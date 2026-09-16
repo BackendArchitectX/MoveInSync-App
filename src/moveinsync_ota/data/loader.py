@@ -122,6 +122,7 @@ def load_file(path: str | Path, period: str, T_seconds: int) -> PeriodLoadResult
     )
     return PeriodLoadResult(
         period=period,
+        t_seconds=T_seconds,
         total_rows=total_rows,
         spot20_excluded=spot20_excluded,
         null_epoch_excluded=null_epoch_excluded,

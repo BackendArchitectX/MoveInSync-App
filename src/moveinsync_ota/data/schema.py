@@ -16,6 +16,7 @@ class VendorPeriodAgg:
 @dataclass
 class PeriodLoadResult:
     period: str
+    t_seconds: int
     total_rows: int
     spot20_excluded: int
     null_epoch_excluded: int
