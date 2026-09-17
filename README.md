@@ -1,6 +1,16 @@
 # OTA Watchdog
 
+[![Core Tests](https://github.com/BackendArchitectX/MoveInSync-App/actions/workflows/test.yml/badge.svg)](https://github.com/BackendArchitectX/MoveInSync-App/actions/workflows/test.yml)
+
 An agentic transport-operations watchdog that proactively detects material vendor OTA deterioration, grounds every alert in deterministic evidence, and uses Claude on Amazon Bedrock only to convert evidence into an operational brief.
+
+## Submission assets
+
+- [Judge Deck](docs/OTA_Watchdog_Judge_Deck.pptx)
+- [2-Minute Demo Script](docs/DEMO_SCRIPT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Sample Output](docs/SAMPLE_OUTPUT.md)
+- [Input Audit](docs/INPUT_AUDIT.md)
 
 ---
 
@@ -164,6 +174,30 @@ Claude **must not**:
 
 ---
 
+## Dataset setup
+
+The supplied anonymised ride CSVs are intentionally not committed to this repository.
+
+Either place them under:
+
+`input/dataset/raw/MoveInSynch Anonymized Trip Log Dataset/`
+
+with these filenames:
+
+- `Ride_data _trip-may_2026.csv`
+- `Ride_data _trip-June_2026.csv`
+- `Ride_data _trip-July_2026.csv`
+
+or point the application to the supplied dataset directory:
+
+```powershell
+$env:MIS_DATA_DIR = "C:\path\to\MoveInSynch Anonymized Trip Log Dataset"
+```
+
+The application treats the source CSVs as local, read-only input. Raw trip rows are never sent to Amazon Bedrock.
+
+---
+
 ## Quick start
 
 ```powershell
@@ -197,7 +231,7 @@ Then start the application:
 python -m uvicorn moveinsync_ota.app.main:app --port 8001
 ```
 
-The Bedrock path is tried lazily when an alert detail is opened. Any failure (auth, throttle, unreachable endpoint) falls back transparently to the deterministic brief.
+The Bedrock path is tried lazily when an alert detail is opened. Bedrock output is validated against semantic safety rules and numeric provenance; any auth, throttle, model, network, or validation failure falls back transparently to the deterministic brief.
 
 > **Never commit AWS credentials, access keys, or session tokens.**
 
@@ -217,7 +251,7 @@ See `.env.example` for the full variable reference.
 6. **Vendor Evidence:** Prior 76.39% → Current 68.53%, change −7.86 pts, 5,294 trips.
 7. **Fleet Context:** Fleet moved down 5.84 percentage points; 18 of 21 vendors crossed the configured deterioration threshold.
 8. **Recorded Delay Context:** 1,666 late trips, 91.1% were labeled NODELAY — surface as recorded context, not a causal explanation.
-9. **Operational Brief:** Claude summarised the evidence. "The model was given only structured evidence fields — it cannot alter the alert or determine threshold-crossing status."
+9. **Operational Brief:** When Bedrock is configured and the generated output passes validation, Claude converts only the structured evidence fields into the brief. Otherwise the application uses the deterministic fallback; neither path can alter the alert or threshold-crossing decision.
 10. **Switch to June → July, click Run Agent Cycle.** Zero alerts. "All 21 vendors maintained OTA — the system doesn't force alerts when none exist."
 
 ---
@@ -242,6 +276,8 @@ python -m pytest -q
 ```
 
 **254 tests passing** across data loading, OTA computation, alert evidence assembly, service layer, narrative provider, and API smoke tests (unit + integration against the real dataset).
+
+GitHub Actions runs the dataset-independent suite with integration tests excluded because the supplied challenge CSVs are intentionally not committed. The full integration suite runs locally when the supplied dataset is available.
 
 ---
 
@@ -271,7 +307,7 @@ src/moveinsync_ota/
 
 tests/                      # 254 tests
 input/dataset/raw/          # gitignored — supplied CSV files
-docs/                       # ARCHITECTURE.md, DEMO_SCRIPT.md, SAMPLE_OUTPUT.md
+docs/                       # architecture, demo script, input audit, sample output, judge deck
 ```
 
 ---
