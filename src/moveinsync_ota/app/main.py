@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -150,6 +150,18 @@ def _detail_dict(c: AlertCandidate) -> dict:
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
+@app.get("/health/live")
+async def health_live():
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    if _svc is None or _narrative is None:
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+    return {"status": "ready"}
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):

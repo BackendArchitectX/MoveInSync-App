@@ -210,4 +210,41 @@ class TestAppIntegration:
     def test_replay_june_july_zero_candidates(self, int_client):
         data = int_client.post("/api/replay/june-july").json()
         assert data["candidates"] == []
-\n\nclass TestHealthEndpoints:\n    def test_liveness_returns_200(self, client):\n        response = client.get("/health/live")\n        assert response.status_code == 200\n        assert response.json() == {"status": "ok"}\n\n    def test_readiness_returns_200_after_initialisation(self, client):\n        response = client.get("/health/ready")\n        assert response.status_code == 200\n        assert response.json() == {"status": "ready"}\n\n    def test_readiness_fails_closed_without_service_state(self, monkeypatch):\n        monkeypatch.setenv("OTA_TEST_MODE", "1")\n        import moveinsync_ota.app.main as main\n\n        previous_svc = main._svc\n        previous_narrative = main._narrative\n        try:\n            main._svc = None\n            main._narrative = None\n            # Exercise the endpoint without entering lifespan; entering test-mode\n            # lifespan intentionally initialises state and would mask this case.\n            transport = __import__("httpx").ASGITransport(app=main.app)\n            import asyncio\n            import httpx\n\n            async def request_ready():\n                async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:\n                    return await c.get("/health/ready")\n\n            response = asyncio.run(request_ready())\n            assert response.status_code == 503\n            assert response.json() == {"status": "not_ready"}\n        finally:\n            main._svc = previous_svc\n            main._narrative = previous_narrative\n
+
+
+class TestHealthEndpoints:
+    def test_liveness_returns_200(self, client):
+        response = client.get("/health/live")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+    def test_readiness_returns_200_after_initialisation(self, client):
+        response = client.get("/health/ready")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ready"}
+
+    def test_readiness_fails_closed_without_service_state(self, monkeypatch):
+        monkeypatch.setenv("OTA_TEST_MODE", "1")
+        import moveinsync_ota.app.main as main
+
+        previous_svc = main._svc
+        previous_narrative = main._narrative
+        try:
+            main._svc = None
+            main._narrative = None
+            # Exercise the endpoint without entering lifespan; entering test-mode
+            # lifespan intentionally initialises state and would mask this case.
+            transport = __import__("httpx").ASGITransport(app=main.app)
+            import asyncio
+            import httpx
+
+            async def request_ready():
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+                    return await c.get("/health/ready")
+
+            response = asyncio.run(request_ready())
+            assert response.status_code == 503
+            assert response.json() == {"status": "not_ready"}
+        finally:
+            main._svc = previous_svc
+            main._narrative = previous_narrative
